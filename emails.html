@@ -47,7 +47,7 @@
     .btn-sm { padding: 5px 12px; font-size: 12px; }
 
     /* ── Setup ── */
-    .setup-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; max-width: 580px; margin: 2rem auto; }
+    .setup-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; max-width: 600px; margin: 2rem auto; }
     .setup-title { font-size: 17px; font-weight: 500; margin-bottom: 8px; }
     .setup-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 1.5rem; }
     .setup-step { display: flex; gap: 12px; margin-bottom: 14px; font-size: 13px; line-height: 1.6; }
@@ -97,7 +97,7 @@
 
     .date-divider { font-size: 11px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.06em; text-transform: uppercase; padding: 14px 0 6px; }
 
-    .state-msg { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 13px; }
+    .state-msg { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 13px; line-height: 1.8; }
     .loading-dots { display: inline-flex; gap: 4px; }
     .loading-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary); animation: bounce 1.2s infinite ease-in-out; }
     .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
@@ -118,20 +118,25 @@
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
       <button id="refresh-btn" class="btn btn-sm" style="display:none" onclick="loadEmails()">↻ Refresh</button>
-      <button id="reset-btn" class="text-btn" style="display:none" onclick="resetSetup()">Change script URL</button>
+      <button id="reset-btn" class="text-btn" style="display:none" onclick="resetSetup()">Change URL</button>
     </div>
   </div>
 
-  <!-- Setup screen -->
+  <!-- Setup -->
   <div id="setup-screen" style="display:none">
     <div class="setup-card">
-      <div class="setup-title">One-time setup — about 2 minutes</div>
-      <div class="setup-sub">This uses a Google Apps Script that runs in your own Google account to read your Canvas emails. No third-party servers or API permissions needed.</div>
+      <div class="setup-title">One-time setup — about 5 minutes</div>
+      <div class="setup-sub">This uses a Google Apps Script that syncs your Canvas emails into a Google Sheet on a timer. The sheet is then published as a public CSV that this page can read — no login redirects, no popups, no API keys.</div>
 
       <div class="setup-step">
         <div class="step-num">1</div>
-        <div>Open <a class="setup-link" href="https://script.google.com" target="_blank">script.google.com</a>, click <strong>New project</strong>, and replace all the code with this:
-          <div class="code-block" id="script-code">function doGet() {
+        <div>Create a new Google Sheet in your UMich account. Name it anything (e.g. "Canvas Emails Data"). Copy the <strong>spreadsheet ID</strong> from the URL — it's the long string between <code>/d/</code> and <code>/edit</code>.</div>
+      </div>
+
+      <div class="setup-step">
+        <div class="step-num">2</div>
+        <div>Open <a class="setup-link" href="https://script.google.com" target="_blank">script.google.com</a>, click <strong>New project</strong>, and paste the code below. Replace <code>YOUR_SHEET_ID</code> with the ID you copied.
+          <div class="code-block" id="script-code">function syncEmails() {
   var threads = GmailApp.search('from:instructure.com', 0, 50);
   var emails = [];
   for (var i = 0; i &lt; threads.length; i++) {
@@ -139,50 +144,58 @@
     for (var j = 0; j &lt; msgs.length; j++) {
       var m = msgs[j];
       var body = m.getPlainBody().split('________')[0].trim();
-      emails.push({
-        id:      m.getId(),
-        subject: m.getSubject(),
-        from:    m.getFrom(),
-        date:    m.getDate().getTime(),
-        body:    body.substring(0, 600),
-        unread:  m.isUnread()
-      });
+      emails.push([
+        m.getId(),
+        m.getSubject(),
+        m.getFrom(),
+        m.getDate().getTime(),
+        body.substring(0, 600),
+        m.isUnread()
+      ]);
     }
   }
-  emails.sort(function(a,b){ return b.date - a.date; });
-  var json = JSON.stringify({emails: emails});
-  var html = '&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;body&gt;'
-    + '&lt;script&gt;window.opener&amp;&amp;window.opener'
-    + '.postMessage(' + json + ',"*");'
-    + 'setTimeout(function(){window.close()},200);'
-    + '&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;';
-  return HtmlService.createHtmlOutput(html);
+  emails.sort(function(a, b) { return b[3] - a[3]; });
+  var ss = SpreadsheetApp.openById('YOUR_SHEET_ID');
+  var sheet = ss.getSheetByName('emails');
+  if (!sheet) sheet = ss.insertSheet('emails');
+  sheet.clearContents();
+  sheet.getRange(1, 1, 1, 6).setValues(
+    [['id','subject','from','date','body','unread']]
+  );
+  if (emails.length &gt; 0) {
+    sheet.getRange(2,1,emails.length,6).setValues(emails);
+  }
 }</div>
           <div class="copy-row"><button class="copy-btn" id="copy-btn" onclick="copyScript()">copy code</button></div>
         </div>
       </div>
 
       <div class="setup-step">
-        <div class="step-num">2</div>
-        <div>Click <strong>Deploy → New deployment</strong>. Set type to <strong>Web app</strong>, <em>Execute as</em>: <strong>Me</strong>, <em>Who has access</em>: <strong>Anyone with Google account</strong>. Click Deploy and authorize when prompted.</div>
+        <div class="step-num">3</div>
+        <div><strong>Run it once:</strong> Click the ▶ Run button in the toolbar. Google will ask you to authorize access to Gmail and Sheets — click through and allow it. You should see data appear in your spreadsheet.</div>
       </div>
 
       <div class="setup-step">
-        <div class="step-num">3</div>
-        <div>Copy the <strong>Web app URL</strong> (ends in <code>/exec</code>) and paste it below.</div>
+        <div class="step-num">4</div>
+        <div><strong>Set up auto-sync:</strong> In the left sidebar click the clock icon (Triggers) → Add Trigger. Set function to <code>syncEmails</code>, event source to <strong>Time-driven</strong>, and pick an interval (e.g. every 15 minutes).</div>
+      </div>
+
+      <div class="setup-step">
+        <div class="step-num">5</div>
+        <div><strong>Publish the sheet:</strong> In your Google Sheet go to <strong>File → Share → Publish to web</strong>. Select the <strong>emails</strong> sheet and <strong>CSV</strong> format. Click Publish and copy the URL.</div>
       </div>
 
       <hr class="setup-divider" />
 
       <div class="setup-input-row">
-        <input class="setup-input" id="url-input" type="text" placeholder="https://script.google.com/macros/s/…/exec" />
+        <input class="setup-input" id="url-input" type="text" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv" />
         <button class="btn btn-primary" onclick="saveUrl()">Save</button>
       </div>
-      <div class="setup-note">When you click Refresh, a small popup window will open briefly to fetch your emails using your Google session, then close automatically. Make sure popups are allowed for this site.</div>
+      <div class="setup-note">The published CSV URL is public and requires no login. It updates automatically whenever the script syncs. The URL is saved in your browser's localStorage.</div>
     </div>
   </div>
 
-  <!-- Main content -->
+  <!-- Main -->
   <div id="main-content" style="display:none">
     <div class="filter-section">
       <div class="filter-row" id="type-filters"></div>
@@ -197,7 +210,7 @@
 
 </div>
 <script>
-let SCRIPT_URL = localStorage.getItem('canvas_script_url') || '';
+let CSV_URL    = localStorage.getItem('canvas_csv_url') || '';
 let allEmails  = [];
 let displayed  = 0;
 const PAGE     = 30;
@@ -227,7 +240,31 @@ function courseColor(c) {
   return dynColors[c];
 }
 
-// ── Parsing ───────────────────────────────────────────────────────────────────
+// ── CSV parsing ───────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const rows = []; let row = []; let field = ''; let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"' && text[i+1] === '"') { field += '"'; i++; }
+      else if (c === '"') inQ = false;
+      else field += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || (c === '\r' && text[i+1] === '\n')) {
+        if (c === '\r') i++;
+        row.push(field); field = '';
+        if (row.length > 1 || row[0] !== '') rows.push(row);
+        row = [];
+      } else field += c;
+    }
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// ── Email parsing ─────────────────────────────────────────────────────────────
 function extractCourse(from) {
   let n = from.split('<')[0].trim();
   n = n.replace(/\s+(WN|FA|SP|SU)\s+\d{4}.*/i, '').trim();
@@ -275,47 +312,7 @@ function parseEmail(raw) {
     .trim().substring(0, 220);
   return {id: raw.id, course, type, isGrade, title: title||raw.subject, preview, grade,
     isUnread: raw.unread, ts: raw.date,
-    gmailUrl: `https://mail.google.com/mail/u/0/#all/${raw.id}`};
-}
-
-// ── Popup fetch ───────────────────────────────────────────────────────────────
-// Opens the script in a small popup window. The browser sends Google session
-// cookies so it authenticates via your existing UMich login. The script returns
-// an HTML page that calls postMessage() back to this window, then closes itself.
-function popupFetch(url) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const settle = (fn, val) => {
-      if (settled) return; settled = true;
-      window.removeEventListener('message', onMsg);
-      clearTimeout(timer);
-      fn(val);
-    };
-
-    const onMsg = e => {
-      if (!e.data || !e.data.emails) return;
-      settle(resolve, e.data);
-    };
-    window.addEventListener('message', onMsg);
-
-    const popup = window.open(url, 'canvas_fetch',
-      'width=480,height=360,left=200,top=200,menubar=no,toolbar=no,location=no');
-    if (!popup) {
-      settle(reject, new Error('Popup was blocked — please allow popups for this site and try again.'));
-      return;
-    }
-
-    // If user closes popup manually before data arrives
-    const pollClosed = setInterval(() => {
-      if (popup.closed) { clearInterval(pollClosed); settle(reject, new Error('Popup was closed before data loaded.')); }
-    }, 500);
-
-    const timer = setTimeout(() => {
-      clearInterval(pollClosed);
-      try { popup.close(); } catch(_) {}
-      settle(reject, new Error('Timed out — make sure you are logged into your UMich Google account and authorized the script during deployment.'));
-    }, 45000);
-  });
+    gmailUrl: 'https://mail.google.com/mail/u/0/#all/' + raw.id};
 }
 
 // ── Load ──────────────────────────────────────────────────────────────────────
@@ -324,9 +321,18 @@ async function loadEmails() {
   document.getElementById('main-content').style.display = 'block';
   showLoading();
   try {
-    const data = await popupFetch(SCRIPT_URL);
-    if (!data.emails) throw new Error('Unexpected response from script.');
-    allEmails = data.emails.map(parseEmail).sort((a,b) => b.ts - a.ts);
+    const resp = await fetch(CSV_URL);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    const rows = parseCSV(text);
+    if (rows.length < 2) throw new Error('Sheet is empty — make sure you ran the script at least once.');
+    // rows[0] = header, rows[1..n] = data
+    const rawEmails = rows.slice(1).map(r => ({
+      id: r[0], subject: r[1], from: r[2],
+      date: parseInt(r[3], 10), body: r[4] || '',
+      unread: r[5] === 'TRUE' || r[5] === 'true'
+    }));
+    allEmails = rawEmails.filter(e => !isNaN(e.date)).map(parseEmail).sort((a,b) => b.ts - a.ts);
     displayed = Math.min(PAGE, allEmails.length);
     document.getElementById('refresh-btn').style.display = 'block';
     renderFilters();
@@ -341,9 +347,9 @@ async function loadEmails() {
 // ── Render ────────────────────────────────────────────────────────────────────
 function getFiltered() {
   return allEmails.filter(e => {
-    if (activeType==='grades'        && !e.isGrade)               return false;
-    if (activeType==='announcements' &&  e.isGrade)               return false;
-    if (activeCourse!=='all'         && e.course!==activeCourse)  return false;
+    if (activeType==='grades'        && !e.isGrade)              return false;
+    if (activeType==='announcements' &&  e.isGrade)              return false;
+    if (activeCourse!=='all'         && e.course!==activeCourse) return false;
     return true;
   });
 }
@@ -435,17 +441,20 @@ function showError(msg){ document.getElementById('email-feed').innerHTML=`<p cla
 
 function saveUrl() {
   const val = document.getElementById('url-input').value.trim();
-  if (!val || !val.includes('script.google.com')) {
+  if (!val || !val.includes('docs.google.com')) {
     document.getElementById('url-input').style.borderColor='#ef4444'; return;
   }
-  SCRIPT_URL = val;
-  localStorage.setItem('canvas_script_url', val);
+  CSV_URL = val;
+  localStorage.setItem('canvas_csv_url', val);
+  // Clear old keys from previous approaches
+  localStorage.removeItem('canvas_script_url');
+  localStorage.removeItem('gmail_client_id');
   document.getElementById('setup-screen').style.display = 'none';
   loadEmails();
 }
 function resetSetup() {
-  localStorage.removeItem('canvas_script_url');
-  SCRIPT_URL=''; allEmails=[];
+  localStorage.removeItem('canvas_csv_url');
+  CSV_URL=''; allEmails=[];
   document.getElementById('main-content').style.display = 'none';
   document.getElementById('refresh-btn').style.display  = 'none';
   document.getElementById('reset-btn').style.display    = 'none';
@@ -461,7 +470,7 @@ function copyScript() {
 }
 
 // Boot
-if (SCRIPT_URL) loadEmails();
+if (CSV_URL) loadEmails();
 else document.getElementById('setup-screen').style.display = 'block';
 </script>
 </body>
