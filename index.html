@@ -259,29 +259,46 @@ function parseICS(text) {
 }
 
 async function fetchAssignments() {
+  // Load cached data instantly so the page renders right away
+  const cached = localStorage.getItem('tcached');
+  if (cached) {
+    try {
+      assignments = JSON.parse(cached).filter(a => daysUntil(a.due) >= -1);
+      renderAll();
+    } catch {}
+  }
+
   document.getElementById('last-updated').textContent = 'Syncing with Canvas...';
   try {
-    const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(ICAL)}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(ICAL)}`, {signal: controller.signal});
+    clearTimeout(timeout);
     const d = await r.json();
     assignments = parseICS(d.contents);
+    localStorage.setItem('tcached', JSON.stringify(assignments));
     document.getElementById('last-updated').textContent = 'Synced from Canvas · ' + new Date().toLocaleTimeString();
   } catch {
-    assignments = [
-      {title:'DogenTeaandRice',course:'ASIAN 325',due:'2026-03-31',type:'reading'},
-      {title:'ZenBuddhism',course:'ASIAN 325',due:'2026-03-31',type:'reading'},
-      {title:'Critical Term 8',course:'ASIAN 325',due:'2026-04-01',type:'writing'},
-      {title:'Checkpoint 11',course:'CHEM 215',due:'2026-04-03',type:'checkpoint'},
-      {title:'Essay Assignment #2',course:'PSYCH 111',due:'2026-04-06',type:'essay'},
-      {title:'Bodiford - Zen Funerals',course:'ASIAN 325',due:'2026-04-07',type:'reading'},
-      {title:'soundofonehand',course:'ASIAN 325',due:'2026-04-07',type:'reading'},
-      {title:'Checkpoint 12',course:'CHEM 215',due:'2026-04-10',type:'checkpoint'},
-      {title:'BuswellTracing',course:'ASIAN 325',due:'2026-04-14',type:'reading'},
-      {title:'Watts - Beat Zen',course:'ASIAN 325',due:'2026-04-14',type:'reading'},
-      {title:'Exam 3',course:'CHEM 215',due:'2026-04-14',type:'exam'},
-      {title:'Checkpoint 13',course:'CHEM 215',due:'2026-04-17',type:'checkpoint'},
-      {title:'Final Exam',course:'CHEM 215',due:'2026-04-23',type:'exam'},
-    ];
-    document.getElementById('last-updated').textContent = 'Could not sync · showing cached data';
+    if (!assignments.length) {
+      assignments = [
+        {title:'DogenTeaandRice',course:'ASIAN 325',due:'2026-03-31',type:'reading'},
+        {title:'ZenBuddhism',course:'ASIAN 325',due:'2026-03-31',type:'reading'},
+        {title:'Critical Term 8',course:'ASIAN 325',due:'2026-04-01',type:'writing'},
+        {title:'Checkpoint 11',course:'CHEM 215',due:'2026-04-03',type:'checkpoint'},
+        {title:'Essay Assignment #2',course:'PSYCH 111',due:'2026-04-06',type:'essay'},
+        {title:'Bodiford - Zen Funerals',course:'ASIAN 325',due:'2026-04-07',type:'reading'},
+        {title:'soundofonehand',course:'ASIAN 325',due:'2026-04-07',type:'reading'},
+        {title:'Checkpoint 12',course:'CHEM 215',due:'2026-04-10',type:'checkpoint'},
+        {title:'BuswellTracing',course:'ASIAN 325',due:'2026-04-14',type:'reading'},
+        {title:'Watts - Beat Zen',course:'ASIAN 325',due:'2026-04-14',type:'reading'},
+        {title:'Exam 3',course:'CHEM 215',due:'2026-04-14',type:'exam'},
+        {title:'Checkpoint 13',course:'CHEM 215',due:'2026-04-17',type:'checkpoint'},
+        {title:'Final Exam',course:'CHEM 215',due:'2026-04-23',type:'exam'},
+      ];
+    }
+    document.getElementById('last-updated').textContent = cached
+      ? 'Could not sync · showing cached data'
+      : 'Could not sync · showing fallback data';
   }
   renderAll();
 }
