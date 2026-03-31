@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Canvas Emails — Tom's Dashboard</title>
+  <script src="https://accounts.google.com/gsi/client" onload="onGsiLoad()" async defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -46,21 +47,23 @@
     .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
     .btn-sm { padding: 5px 12px; font-size: 12px; }
 
-    /* ── Setup screen ── */
-    .setup-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; max-width: 600px; margin: 2rem auto; }
+    /* ── Setup ── */
+    .setup-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; max-width: 580px; margin: 2rem auto; }
     .setup-title { font-size: 17px; font-weight: 500; margin-bottom: 8px; }
     .setup-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 1.5rem; }
-    .setup-step { display: flex; gap: 12px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; }
+    .setup-step { display: flex; gap: 12px; margin-bottom: 14px; font-size: 13px; line-height: 1.6; }
     .step-num { width: 20px; height: 20px; min-width: 20px; border-radius: 50%; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; margin-top: 2px; }
-    .code-block { background: var(--bg-secondary); border: 0.5px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; white-space: pre; overflow-x: auto; margin: 10px 0 4px; line-height: 1.6; color: var(--text); }
-    .copy-btn { font-size: 11px; font-family: var(--font); color: var(--text-tertiary); background: none; border: none; cursor: pointer; padding: 0; }
-    .copy-btn:hover { color: var(--text-secondary); }
+    .setup-link { color: var(--text-secondary); }
+    .setup-note { font-size: 11px; color: var(--text-tertiary); margin-top: 10px; line-height: 1.5; }
     .setup-divider { border: none; border-top: 0.5px solid var(--border); margin: 1.5rem 0; }
     .setup-input-row { display: flex; gap: 8px; }
     .setup-input { flex: 1; font-size: 13px; font-family: var(--font); border: 0.5px solid var(--border-mid); border-radius: var(--radius-md); padding: 7px 10px; background: var(--bg); color: var(--text); }
     .setup-input:focus { outline: none; border-color: var(--text-secondary); }
-    .setup-link { color: var(--text-secondary); }
-    .setup-note { font-size: 11px; color: var(--text-tertiary); margin-top: 8px; }
+    code { font-size: 11px; background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+    /* ── Auth button screen ── */
+    .auth-screen { text-align: center; padding: 4rem 1rem; }
+    .auth-screen p { font-size: 13px; color: var(--text-secondary); margin-bottom: 1.5rem; }
 
     /* ── Filters ── */
     .filter-section { margin-bottom: 16px; }
@@ -73,26 +76,22 @@
     .stat { font-size: 12px; color: var(--text-secondary); }
     .stat strong { color: var(--text); font-weight: 500; }
 
-    /* ── Email cards ── */
+    /* ── Cards ── */
     .email-feed { display: flex; flex-direction: column; gap: 8px; }
     .email-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; text-decoration: none; display: block; color: inherit; }
     .email-card:hover { border-color: var(--border-mid); }
     .email-card.unread { border-left: 3px solid var(--text); }
-
     .email-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
     .email-card-meta { margin-left: auto; display: flex; align-items: center; gap: 8px; }
     .email-date { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
     .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: #3b82f6; flex-shrink: 0; }
-
     .course-pill { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
     .type-badge { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
     .badge-grade    { background: #d1fae5; color: #065f46; }
     .badge-graded   { background: #dbeafe; color: #1e40af; }
     .badge-announce { background: var(--bg-secondary); color: var(--text-secondary); }
-
     .email-title { font-size: 13px; font-weight: 500; line-height: 1.4; margin-bottom: 4px; }
     .email-preview { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
-
     .grade-score { display: inline-flex; align-items: baseline; gap: 5px; margin-top: 6px; padding: 4px 10px; border-radius: var(--radius-md); }
     .grade-score-val { font-size: 15px; font-weight: 600; }
     .grade-score-pct { font-size: 11px; opacity: 0.7; }
@@ -105,10 +104,9 @@
     .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
     .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes bounce { 0%,80%,100%{transform:scale(0.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
-
     .load-more-wrap { text-align: center; padding: 16px 0 4px; }
-    .reset-link { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; font-family: var(--font); padding: 0; }
-    .reset-link:hover { color: var(--text-secondary); }
+    .text-btn { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; font-family: var(--font); padding: 0; }
+    .text-btn:hover { color: var(--text-secondary); }
   </style>
 </head>
 <body>
@@ -121,69 +119,56 @@
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <button id="refresh-btn" class="btn btn-sm" style="display:none" onclick="loadEmails(true)">↻ Refresh</button>
-      <button id="reset-btn" class="reset-link" style="display:none" onclick="resetSetup()">Change script URL</button>
+      <button id="reconnect-btn" class="btn btn-sm" style="display:none" onclick="reconnect()">Reconnect</button>
+      <button id="reset-btn" class="text-btn" style="display:none" onclick="resetSetup()">Change Client ID</button>
     </div>
   </div>
 
-  <!-- Setup screen -->
+  <!-- Step 1: No client ID stored yet -->
   <div id="setup-screen" style="display:none">
     <div class="setup-card">
-      <div class="setup-title">One-time setup — takes about 3 minutes</div>
-      <div class="setup-sub">This page reads your Canvas emails from Gmail using a Google Apps Script you deploy yourself. No passwords or OAuth apps needed — the script runs as you in your own Google account.</div>
+      <div class="setup-title">One-time setup — about 5 minutes</div>
+      <div class="setup-sub">This uses the Gmail API with your Google account directly — no third-party servers involved. You need a free Google Cloud project and an OAuth Client ID.</div>
 
       <div class="setup-step">
         <div class="step-num">1</div>
-        <div>Open <a class="setup-link" href="https://script.google.com" target="_blank">script.google.com</a>, click <strong>New project</strong>, and replace all the code with this:
-          <div style="position:relative">
-            <div class="code-block" id="script-code">function doGet() {
-  var threads = GmailApp.search('from:instructure.com', 0, 50);
-  var emails = [];
-  for (var i = 0; i &lt; threads.length; i++) {
-    var msgs = threads[i].getMessages();
-    for (var j = 0; j &lt; msgs.length; j++) {
-      var m = msgs[j];
-      var body = m.getPlainBody().split('________')[0].trim();
-      emails.push({
-        id:      m.getId(),
-        subject: m.getSubject(),
-        from:    m.getFrom(),
-        date:    m.getDate().getTime(),
-        body:    body.substring(0, 600),
-        unread:  m.isUnread()
-      });
-    }
-  }
-  emails.sort(function(a,b){ return b.date - a.date; });
-  return ContentService
-    .createTextOutput(JSON.stringify({emails: emails}))
-    .setMimeType(ContentService.MimeType.JSON);
-}</div>
-            <button class="copy-btn" onclick="copyScript()" id="copy-btn">copy</button>
-          </div>
-        </div>
+        <div>Go to <a class="setup-link" href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a>. Create a new project (top-left dropdown → New Project). Name it anything.</div>
       </div>
 
       <div class="setup-step">
         <div class="step-num">2</div>
-        <div>Click <strong>Deploy → New deployment</strong>. Set type to <strong>Web app</strong>, <em>Execute as</em> → <strong>Me</strong>, <em>Who has access</em> → <strong>Anyone</strong>. Click <strong>Deploy</strong> and authorize when prompted.</div>
+        <div>In the left sidebar go to <strong>APIs &amp; Services → Library</strong>. Search for <strong>Gmail API</strong> and click Enable.</div>
       </div>
 
       <div class="setup-step">
         <div class="step-num">3</div>
-        <div>Copy the <strong>Web app URL</strong> (starts with <code style="font-size:11px;background:var(--bg-secondary);padding:1px 5px;border-radius:4px">https://script.google.com/macros/s/…/exec</code>) and paste it below.</div>
+        <div>Go to <strong>APIs &amp; Services → OAuth consent screen</strong>. Choose <strong>External</strong>, click Create. Fill in any App name and your email for support. <strong>Important:</strong> click <em>Add or Remove Scopes</em> and add <code>https://www.googleapis.com/auth/gmail.readonly</code>. Then under <em>Test users</em>, add your own email address. Save and continue through all steps.</div>
+      </div>
+
+      <div class="setup-step">
+        <div class="step-num">4</div>
+        <div>Go to <strong>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</strong>. Choose <strong>Web application</strong>. Under <em>Authorized JavaScript origins</em> add <code id="origin-display"></code>. Save and copy the <strong>Client ID</strong>.</div>
       </div>
 
       <hr class="setup-divider" />
 
       <div class="setup-input-row">
-        <input class="setup-input" id="script-url-input" type="text" placeholder="https://script.google.com/macros/s/…/exec" />
-        <button class="btn btn-primary" onclick="saveScriptUrl()">Save</button>
+        <input class="setup-input" id="client-id-input" type="text" placeholder="123456789-abc….apps.googleusercontent.com" />
+        <button class="btn btn-primary" onclick="saveClientId()">Save</button>
       </div>
-      <div class="setup-note">The URL is stored only in your browser's localStorage. The script only reads your Gmail — it cannot send or delete anything.</div>
+      <div class="setup-note">The Client ID is stored only in your browser's localStorage. The app only requests read-only access to Gmail.</div>
     </div>
   </div>
 
-  <!-- Main content -->
+  <!-- Step 2: Have client ID, need to sign in -->
+  <div id="auth-screen" style="display:none">
+    <div class="auth-screen">
+      <p>Sign in with Google to load your Canvas emails.</p>
+      <button id="auth-btn" class="btn btn-primary" onclick="requestToken()">Connect Gmail</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Loaded -->
   <div id="main-content" style="display:none">
     <div class="filter-section">
       <div class="filter-row" id="type-filters"></div>
@@ -198,17 +183,19 @@
 
 </div>
 <script>
-const PROXY = 'https://api.allorigins.win/get?url=';
+const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
-let SCRIPT_URL = localStorage.getItem('canvas_script_url') || '';
-let allEmails = [];
-let displayed = 0;
-const PAGE = 30;
+let CLIENT_ID    = localStorage.getItem('gmail_client_id') || '';
+let accessToken  = sessionStorage.getItem('gmail_token')   || '';
+let tokenClient  = null;
+let allEmails    = [];
+let displayed    = 0;
+const PAGE       = 30;
 let activeType   = 'all';
 let activeCourse = 'all';
 
 // ── Course colours ────────────────────────────────────────────────────────────
-const COURSE_COLORS = {
+const KNOWN_COLORS = {
   'PHYSICS 240':   {color:'#dbeafe', text:'#1e40af'},
   'PHYSICS 241':   {color:'#bfdbfe', text:'#1d4ed8'},
   'ASIAN 325':     {color:'#ede9fe', text:'#5b21b6'},
@@ -227,8 +214,8 @@ const AUTO_PALETTE = [
 ];
 const dynColors = {};
 let palIdx = 0;
-function getCourseColor(c) {
-  if (COURSE_COLORS[c]) return COURSE_COLORS[c];
+function courseColor(c) {
+  if (KNOWN_COLORS[c]) return KNOWN_COLORS[c];
   if (!dynColors[c]) dynColors[c] = AUTO_PALETTE[palIdx++ % AUTO_PALETTE.length];
   return dynColors[c];
 }
@@ -242,13 +229,14 @@ function extractCourse(from) {
 }
 
 function parseType(subject) {
-  if (/^grade changed:/i.test(subject))     return 'grade-changed';
-  if (/^submission posted:/i.test(subject)) return 'submission-posted';
+  if (/^grade changed:/i.test(subject))      return 'grade-changed';
+  if (/^submission posted:/i.test(subject))  return 'submission-posted';
+  if (/^assignment graded:/i.test(subject))  return 'assignment-graded';
   return 'announcement';
 }
 
 function extractAssignment(subject) {
-  let s = subject.replace(/^(grade changed|submission posted):\s*/i, '').trim();
+  let s = subject.replace(/^(grade changed|submission posted|assignment graded):\s*/i, '').trim();
   s = s.replace(/,\s*[A-Za-z][\w\s.]*\s+(WN|FA|SP|SU)\s+\d{4}\s*$/i, '').trim();
   return s;
 }
@@ -262,8 +250,7 @@ function extractAnnouncementTitle(subject, fromRaw) {
 function parseGrade(body) {
   const m = body.match(/score:\s*([\d.]+)\s+out\s+of\s+([\d.]+)/i);
   if (!m) return null;
-  const score = parseFloat(m[1]);
-  const total = parseFloat(m[2]);
+  const score = parseFloat(m[1]), total = parseFloat(m[2]);
   return { score, total, pct: total > 0 ? Math.round(score / total * 100) : null };
 }
 
@@ -274,60 +261,111 @@ function gradeStyle(pct) {
   return                  {bg:'#fee2e2', text:'#991b1b'};
 }
 
-function parseEmail(raw) {
-  const fromRaw = raw.from.split('<')[0].trim();
-  const course  = extractCourse(raw.from);
-  const type    = parseType(raw.subject);
-  const isGrade = type === 'grade-changed' || type === 'submission-posted';
-  const grade   = isGrade ? parseGrade(raw.body) : null;
-  const title   = isGrade
-    ? extractAssignment(raw.subject)
-    : extractAnnouncementTitle(raw.subject, fromRaw);
-
-  // Clean preview: strip Canvas boilerplate
-  const preview = raw.body
-    .replace(/You received this email because[\s\S]*/i, '')
-    .replace(/View announcement[\s\S]*/i, '')
-    .replace(/https?:\/\/\S+/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .substring(0, 200);
-
-  return { id: raw.id, course, type, isGrade, title: title || raw.subject, preview, grade, isUnread: raw.unread, ts: raw.date,
-    gmailUrl: `https://mail.google.com/mail/u/0/#all/${raw.id}` };
+function headersMap(raw) {
+  const m = {};
+  (raw.payload?.headers || []).forEach(h => { m[h.name] = h.value; });
+  return m;
 }
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
+function decodeBody(raw) {
+  // Walk payload parts to find text/plain
+  function findPart(payload) {
+    if (!payload) return '';
+    if (payload.mimeType === 'text/plain' && payload.body?.data) {
+      try {
+        return new TextDecoder().decode(
+          Uint8Array.from(atob(payload.body.data.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0))
+        );
+      } catch { return ''; }
+    }
+    for (const p of payload.parts || []) {
+      const r = findPart(p);
+      if (r) return r;
+    }
+    return '';
+  }
+  return findPart(raw.payload);
+}
+
+function parseMessage(raw) {
+  const h        = headersMap(raw);
+  const from     = h['From'] || '';
+  const subject  = h['Subject'] || '';
+  const fromRaw  = from.split('<')[0].trim();
+  const course   = extractCourse(from);
+  const type     = parseType(subject);
+  const isGrade  = type !== 'announcement';
+  const body     = decodeBody(raw) || raw.snippet || '';
+  const grade    = isGrade ? parseGrade(body) : null;
+  const title    = isGrade ? extractAssignment(subject) : extractAnnouncementTitle(subject, fromRaw);
+
+  const preview = body
+    .replace(/You received this email because[\s\S]*/i, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/\[([^\]]+)\]\s*\([^)]*\)/g, '$1')  // strip markdown links
+    .replace(/\r?\n{3,}/g, '\n\n')
+    .trim()
+    .substring(0, 220);
+
+  return {
+    id: raw.id, course, type, isGrade,
+    title: title || subject, preview, grade,
+    isUnread: (raw.labelIds || []).includes('UNREAD'),
+    ts: Number(raw.internalDate),
+    gmailUrl: `https://mail.google.com/mail/u/0/#all/${raw.id}`,
+  };
+}
+
+// ── Gmail API ─────────────────────────────────────────────────────────────────
+async function gmailGet(path, params = {}) {
+  const url = new URL(GMAIL + path);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (r.status === 401) { handleExpired(); throw new Error('401'); }
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
 async function loadEmails(force = false) {
   if (force) allEmails = [];
+  showMain();
   showLoading();
 
   try {
-    const url  = PROXY + encodeURIComponent(SCRIPT_URL);
-    const resp = await fetch(url);
-    const json = await resp.json();
-    const data = JSON.parse(json.contents);
+    // 1. List message IDs
+    const list = await gmailGet('/messages', { q: 'from:instructure.com', maxResults: 50 });
+    const ids  = (list.messages || []).map(m => m.id);
+    if (!ids.length) { renderEmails(); return; }
 
-    if (!data.emails) throw new Error('Unexpected response');
+    // 2. Fetch full messages in parallel batches of 10
+    const batches = [];
+    for (let i = 0; i < ids.length; i += 10) batches.push(ids.slice(i, i + 10));
+    const msgs = (await Promise.all(
+      batches.map(batch =>
+        Promise.all(batch.map(id => gmailGet(`/messages/${id}`, { format: 'full' })))
+      )
+    )).flat();
 
-    allEmails = data.emails.map(parseEmail).sort((a, b) => b.ts - a.ts);
-    displayed = Math.min(PAGE, allEmails.length);
+    allEmails  = msgs.map(parseMessage).sort((a, b) => b.ts - a.ts);
+    displayed  = Math.min(PAGE, allEmails.length);
 
-    document.getElementById('main-content').style.display = 'block';
-    document.getElementById('refresh-btn').style.display  = 'block';
-    document.getElementById('reset-btn').style.display    = 'block';
+    document.getElementById('refresh-btn').style.display    = 'block';
+    document.getElementById('reset-btn').style.display      = 'block';
+    document.getElementById('reconnect-btn').style.display  = 'none';
     renderFilters();
     renderEmails();
   } catch (e) {
-    showError('Could not load emails. Check that your script URL is correct and the deployment is set to "Anyone" access.<br><br><small>' + e.message + '</small>');
+    if (e.message !== '401') {
+      showError('Could not load emails — ' + e.message);
+    }
   }
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function getFiltered() {
   return allEmails.filter(e => {
-    if (activeType === 'grades'        && !e.isGrade)              return false;
-    if (activeType === 'announcements' && e.isGrade)               return false;
+    if (activeType === 'grades'        && !e.isGrade)               return false;
+    if (activeType === 'announcements' &&  e.isGrade)               return false;
     if (activeCourse !== 'all'         && e.course !== activeCourse) return false;
     return true;
   });
@@ -335,38 +373,30 @@ function getFiltered() {
 
 function renderFilters() {
   const courses = [...new Set(allEmails.map(e => e.course))].sort();
-
   document.getElementById('type-filters').innerHTML =
-    ['all', 'grades', 'announcements'].map(t =>
-      `<button class="filter-btn${activeType === t ? ' active' : ''}" onclick="setType('${t}')">${t}</button>`
+    ['all','grades','announcements'].map(t =>
+      `<button class="filter-btn${activeType===t?' active':''}" onclick="setType('${t}')">${t}</button>`
     ).join('');
-
   document.getElementById('course-filters').innerHTML =
     ['all', ...courses].map(c => {
-      const safe = c.replace(/'/g, "\\'");
-      return `<button class="filter-btn${activeCourse === c ? ' active' : ''}" onclick="setCourse('${safe}')">${c === 'all' ? 'all courses' : c}</button>`;
+      const safe = c.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<button class="filter-btn${activeCourse===c?' active':''}" onclick="setCourse('${safe}')">${c==='all'?'all courses':c}</button>`;
     }).join('');
 }
 
-function setType(t)   { activeType = t;   renderFilters(); renderEmails(); }
-function setCourse(c) { activeCourse = c; renderFilters(); renderEmails(); }
-
-function showMore() {
-  displayed = Math.min(displayed + PAGE, getFiltered().length);
-  renderEmails();
-}
+function setType(t)   { activeType=t;   renderFilters(); renderEmails(); }
+function setCourse(c) { activeCourse=c; renderFilters(); renderEmails(); }
+function showMore()   { displayed=Math.min(displayed+PAGE, getFiltered().length); renderEmails(); }
 
 function renderEmails() {
   const feed  = document.getElementById('email-feed');
   const items = getFiltered().slice(0, displayed);
   const all   = getFiltered();
 
-  const unread = allEmails.filter(e => e.isUnread).length;
-  const grades = allEmails.filter(e => e.isGrade).length;
   document.getElementById('stats-row').innerHTML =
     `<span class="stat"><strong>${allEmails.length}</strong> emails</span>` +
-    `<span class="stat"><strong>${unread}</strong> unread</span>` +
-    `<span class="stat"><strong>${grades}</strong> grade notifications</span>`;
+    `<span class="stat"><strong>${allEmails.filter(e=>e.isUnread).length}</strong> unread</span>` +
+    `<span class="stat"><strong>${allEmails.filter(e=>e.isGrade).length}</strong> grade notifications</span>`;
 
   if (!items.length) {
     feed.innerHTML = '<p class="state-msg">No emails match this filter.</p>';
@@ -374,47 +404,44 @@ function renderEmails() {
     return;
   }
 
-  let html = '';
-  let lastLabel = '';
+  let html = '', lastLabel = '';
   items.forEach(e => {
     const label = dividerLabel(e.ts);
     if (label !== lastLabel) { html += `<div class="date-divider">${label}</div>`; lastLabel = label; }
     html += cardHTML(e);
   });
   feed.innerHTML = html;
-
   document.getElementById('load-more-wrap').style.display = displayed < all.length ? 'block' : 'none';
 }
 
 function cardHTML(e) {
-  const cc = getCourseColor(e.course);
+  const cc   = courseColor(e.course);
   const pill = `<span class="course-pill" style="background:${cc.color};color:${cc.text}">${e.course}</span>`;
-
   const badge =
-    e.type === 'grade-changed'      ? '<span class="type-badge badge-grade">Grade changed</span>' :
-    e.type === 'submission-posted'  ? '<span class="type-badge badge-graded">Graded</span>' :
-                                      '<span class="type-badge badge-announce">Announcement</span>';
+    e.type === 'grade-changed'     ? '<span class="type-badge badge-grade">Grade changed</span>' :
+    e.type === 'submission-posted' ? '<span class="type-badge badge-graded">Graded</span>' :
+    e.type === 'assignment-graded' ? '<span class="type-badge badge-graded">Graded</span>' :
+                                     '<span class="type-badge badge-announce">Announcement</span>';
 
   let body = '';
   if (e.isGrade && e.grade) {
-    const g  = e.grade;
-    const gs = gradeStyle(g.pct);
+    const g  = e.grade, gs = gradeStyle(g.pct);
     const sv = Number.isInteger(g.score) ? g.score : g.score.toFixed(1);
     const tv = Number.isInteger(g.total) ? g.total : g.total.toFixed(1);
     body = `<div class="grade-score" style="background:${gs.bg};color:${gs.text}">
       <span class="grade-score-val">${sv} / ${tv}</span>
-      ${g.pct !== null ? `<span class="grade-score-pct">· ${g.pct}%</span>` : ''}
+      ${g.pct!==null?`<span class="grade-score-pct">· ${g.pct}%</span>`:''}
     </div>`;
   } else if (e.preview) {
     body = `<div class="email-preview">${e.preview}</div>`;
   }
 
-  return `<a class="email-card${e.isUnread ? ' unread' : ''}" href="${e.gmailUrl}" target="_blank" rel="noopener">
+  return `<a class="email-card${e.isUnread?' unread':''}" href="${e.gmailUrl}" target="_blank" rel="noopener">
     <div class="email-card-top">
       ${pill}${badge}
       <div class="email-card-meta">
         <span class="email-date">${formatDate(e.ts)}</span>
-        ${e.isUnread ? '<span class="unread-dot"></span>' : ''}
+        ${e.isUnread?'<span class="unread-dot"></span>':''}
       </div>
     </div>
     <div class="email-title">${e.title}</div>
@@ -424,73 +451,111 @@ function cardHTML(e) {
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 function dividerLabel(ts) {
-  const d = new Date(Number(ts)), now = new Date();
-  const days = Math.floor((now - d) / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7)  return 'This week';
-  if (days < 14) return 'Last week';
-  return d.toLocaleDateString('en-US', {month:'long', year:'numeric'});
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (days===0) return 'Today';
+  if (days===1) return 'Yesterday';
+  if (days<7)   return 'This week';
+  if (days<14)  return 'Last week';
+  return new Date(ts).toLocaleDateString('en-US',{month:'long',year:'numeric'});
 }
-
 function formatDate(ts) {
-  const d = new Date(Number(ts)), now = new Date();
-  const days = Math.floor((now - d) / 86400000);
-  if (days === 0) return d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
-  if (days === 1) return 'Yesterday';
-  if (days < 7)  return d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
-  return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  const days = Math.floor((Date.now()-ts)/86400000);
+  const d = new Date(ts);
+  if (days===0) return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+  if (days===1) return 'Yesterday';
+  if (days<7)   return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
 // ── UI helpers ────────────────────────────────────────────────────────────────
-function showLoading() {
-  document.getElementById('email-feed').innerHTML =
-    '<p class="state-msg"><span class="loading-dots"><span></span><span></span><span></span></span></p>';
-}
-function showError(msg) {
-  document.getElementById('email-feed').innerHTML = `<p class="state-msg">${msg}</p>`;
-  document.getElementById('main-content').style.display = 'block';
+function showMain()     { document.getElementById('main-content').style.display='block'; document.getElementById('auth-screen').style.display='none'; document.getElementById('setup-screen').style.display='none'; }
+function showLoading()  { document.getElementById('email-feed').innerHTML='<p class="state-msg"><span class="loading-dots"><span></span><span></span><span></span></span></p>'; }
+function showError(msg) { document.getElementById('email-feed').innerHTML=`<p class="state-msg">${msg}</p>`; }
+
+// ── OAuth ─────────────────────────────────────────────────────────────────────
+function onGsiLoad() {
+  if (!CLIENT_ID) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    callback: resp => {
+      if (resp.error) { console.error(resp); return; }
+      accessToken = resp.access_token;
+      sessionStorage.setItem('gmail_token', accessToken);
+      document.getElementById('auth-screen').style.display = 'none';
+      loadEmails();
+    },
+  });
+  if (accessToken) {
+    loadEmails();
+  } else {
+    document.getElementById('auth-screen').style.display = 'block';
+  }
 }
 
-// ── Setup ─────────────────────────────────────────────────────────────────────
-function saveScriptUrl() {
-  const val = document.getElementById('script-url-input').value.trim();
-  if (!val || !val.includes('script.google.com')) {
-    document.getElementById('script-url-input').style.borderColor = '#ef4444';
-    return;
+function requestToken() {
+  if (!tokenClient) {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/gmail.readonly',
+      callback: resp => {
+        if (resp.error) { console.error(resp); return; }
+        accessToken = resp.access_token;
+        sessionStorage.setItem('gmail_token', accessToken);
+        document.getElementById('auth-screen').style.display = 'none';
+        loadEmails();
+      },
+    });
   }
-  SCRIPT_URL = val;
-  localStorage.setItem('canvas_script_url', val);
+  tokenClient.requestAccessToken();
+}
+
+function handleExpired() {
+  accessToken = '';
+  sessionStorage.removeItem('gmail_token');
+  document.getElementById('reconnect-btn').style.display = 'block';
+  document.getElementById('refresh-btn').style.display   = 'none';
+  showError('Session expired — click Reconnect.');
+}
+
+function reconnect() { requestToken(); }
+
+// ── Setup ─────────────────────────────────────────────────────────────────────
+function saveClientId() {
+  const val = document.getElementById('client-id-input').value.trim();
+  if (!val) return;
+  CLIENT_ID = val;
+  localStorage.setItem('gmail_client_id', val);
   document.getElementById('setup-screen').style.display = 'none';
-  loadEmails();
+  // GIS may already be loaded
+  if (typeof google !== 'undefined' && google.accounts) {
+    onGsiLoad();
+  } else {
+    document.getElementById('auth-screen').style.display = 'block';
+  }
 }
 
 function resetSetup() {
-  localStorage.removeItem('canvas_script_url');
-  SCRIPT_URL = '';
-  allEmails = [];
-  document.getElementById('main-content').style.display = 'none';
-  document.getElementById('refresh-btn').style.display  = 'none';
-  document.getElementById('reset-btn').style.display    = 'none';
-  document.getElementById('setup-screen').style.display = 'block';
-}
-
-function copyScript() {
-  const code = document.getElementById('script-code').textContent
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-  navigator.clipboard.writeText(code).then(() => {
-    const btn = document.getElementById('copy-btn');
-    btn.textContent = 'copied!';
-    setTimeout(() => btn.textContent = 'copy', 2000);
-  });
+  localStorage.removeItem('gmail_client_id');
+  sessionStorage.removeItem('gmail_token');
+  CLIENT_ID = ''; accessToken = ''; allEmails = [];
+  document.getElementById('main-content').style.display  = 'none';
+  document.getElementById('auth-screen').style.display   = 'none';
+  document.getElementById('refresh-btn').style.display   = 'none';
+  document.getElementById('reset-btn').style.display     = 'none';
+  document.getElementById('reconnect-btn').style.display = 'none';
+  document.getElementById('setup-screen').style.display  = 'block';
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-if (SCRIPT_URL) {
-  loadEmails();
-} else {
+document.getElementById('origin-display').textContent = window.location.origin;
+
+if (!CLIENT_ID) {
   document.getElementById('setup-screen').style.display = 'block';
+} else if (typeof google !== 'undefined' && google.accounts) {
+  onGsiLoad();
 }
+// else: GIS script will call onGsiLoad() via onload attribute when ready
 </script>
 </body>
 </html>
