@@ -40,7 +40,7 @@
     .greeting { font-size: 22px; font-weight: 500; }
     .date-str { font-size: 13px; color: var(--text-secondary); }
 
-    .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 1.5rem; }
     @media (max-width: 600px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
     .metric { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 0.875rem 1rem; }
     .metric-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
@@ -115,19 +115,6 @@
     .due-future { color: var(--text-tertiary); }
     .empty { font-size: 13px; color: var(--text-tertiary); padding: 8px 0; }
 
-    .study-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 0.5px solid var(--border); }
-    .study-row:last-child { border-bottom: none; }
-    .study-info { flex: 1; min-width: 0; }
-    .study-name { font-size: 13px; font-weight: 500; }
-    .study-sub { font-size: 11px; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
-    .study-controls { display: flex; align-items: center; gap: 6px; }
-    .hour-btn { width: 24px; height: 24px; border-radius: 50%; border: 0.5px solid var(--border-mid); background: none; color: var(--text); cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center; font-family: var(--font); line-height: 1; }
-    .hour-btn:hover { background: var(--bg-secondary); }
-    .hour-val { font-size: 13px; font-weight: 500; min-width: 30px; text-align: center; }
-    .study-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 0.5px solid var(--border); }
-    .study-footer-label { font-size: 12px; color: var(--text-secondary); }
-    .study-footer-val { font-size: 15px; font-weight: 500; }
-
     .refresh-btn { font-size: 12px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; font-family: var(--font); padding: 0; margin-left: 6px; }
     .refresh-btn:hover { color: var(--text); }
     .last-updated { font-size: 11px; color: var(--text-tertiary); margin-top: 1.5rem; text-align: center; }
@@ -157,11 +144,6 @@
       <div class="metric-value" id="m-done">—</div>
       <div class="metric-sub">of <span id="m-total">—</span> total</div>
     </div>
-    <div class="metric">
-      <div class="metric-label">Study hrs planned</div>
-      <div class="metric-value" id="m-study">0</div>
-      <div class="metric-sub">this week</div>
-    </div>
   </div>
 
   <div class="section-label">Exam countdowns</div>
@@ -179,15 +161,6 @@
       </div>
       <div class="filter-row" id="filter-row"></div>
       <div class="card" id="assign-card"></div>
-    </div>
-  </div>
-
-  <div class="section-label">Study time estimator — this week</div>
-  <div class="card">
-    <div id="study-list"></div>
-    <div class="study-footer">
-      <span class="study-footer-label">Total this week</span>
-      <span class="study-footer-val"><span id="study-total">0</span> hrs</span>
     </div>
   </div>
 
@@ -238,7 +211,6 @@ const today = new Date(); today.setHours(0,0,0,0);
 let assignments = [];
 let done     = new Set(JSON.parse(localStorage.getItem('tdone')  || '[]'));
 let manualExams  = JSON.parse(localStorage.getItem('texams') || '[]');
-let studyHrs = JSON.parse(localStorage.getItem('tstudy') || '{}');
 let activeFilter = 'all';
 
 const daysUntil = str => Math.round((new Date(str+'T00:00:00') - today) / 86400000);
@@ -428,49 +400,9 @@ function updateMetrics() {
   document.getElementById('m-today').textContent = assignments.filter(a=>daysUntil(a.due)===0).length;
   document.getElementById('m-done').textContent = done.size;
   document.getElementById('m-total').textContent = assignments.length;
-  const total = Object.values(studyHrs).reduce((s,v)=>s+(v||0),0);
-  document.getElementById('m-study').textContent = total;
-  document.getElementById('study-total').textContent = total;
 }
 
-// --- Study time ---
-function renderStudy() {
-  const wEnd = new Date(today); wEnd.setDate(today.getDate()+7);
-  const items = assignments.filter(a => daysUntil(a.due)>=0 && new Date(a.due+'T00:00:00')<=wEnd);
-  if(!items.length) {
-    document.getElementById('study-list').innerHTML='<p class="empty" style="padding:4px 0 12px;">No assignments due this week.</p>';
-    return;
-  }
-  document.getElementById('study-list').innerHTML = items.map(a => {
-    const key = a.course+'|'+a.due+'|'+a.title;
-    const h = studyHrs[key]||0;
-    const c = COURSES[a.course]||{color:'#f1f0eb',text:'#555'};
-    const {label} = dueLabel(a.due);
-    return `<div class="study-row">
-      <div class="study-info">
-        <div class="study-name">${a.title}</div>
-        <div class="study-sub">
-          <span class="course-pill" style="background:${c.color};color:${c.text}">${a.course}</span>
-          <span style="color:var(--text-tertiary)">${label}</span>
-        </div>
-      </div>
-      <div class="study-controls">
-        <button class="hour-btn" onclick="adjustHrs('${key}',-1)">−</button>
-        <span class="hour-val">${h}h</span>
-        <button class="hour-btn" onclick="adjustHrs('${key}',1)">+</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function adjustHrs(key, delta) {
-  studyHrs[key] = Math.max(0, (studyHrs[key]||0)+delta);
-  localStorage.setItem('tstudy', JSON.stringify(studyHrs));
-  renderStudy();
-  updateMetrics();
-}
-
-function renderAll() { renderExams(); renderCourses(); renderFilters(); renderAssigns(); renderStudy(); }
+function renderAll() { renderExams(); renderCourses(); renderFilters(); renderAssigns(); }
 
 document.getElementById('today-str').textContent = today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 fetchAssignments();
