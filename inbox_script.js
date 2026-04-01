@@ -1,6 +1,6 @@
 var SHEET_ID = 'YOUR_SHEET_ID';
-var OPENROUTER_KEY = 'YOUR_OPENROUTER_KEY';
-var AI_MODEL = 'openai/gpt-oss-120b:free'; // change to your preferred model
+var OPENAI_KEY = 'YOUR_OPENAI_KEY';
+var AI_MODEL = 'gpt-4.1-nano'; // change to your preferred model
 
 function syncInbox() {
   var threads = GmailApp.search('in:inbox newer_than:14d', 0, 200);
@@ -81,11 +81,11 @@ function syncInbox() {
 
 function aiCall(prompt) {
   var resp = UrlFetchApp.fetch(
-    'https://openrouter.ai/api/v1/chat/completions',
+    'https://api.openai.com/v1/chat/completions',
     {
       method: 'post',
       contentType: 'application/json',
-      headers: { 'Authorization': 'Bearer ' + OPENROUTER_KEY },
+      headers: { 'Authorization': 'Bearer ' + OPENAI_KEY },
       payload: JSON.stringify({
         model: AI_MODEL,
         messages: [{ role: 'user', content: prompt }]
