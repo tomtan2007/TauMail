@@ -149,14 +149,12 @@
   <div id="main-content" style="display:none">
     <div id="stats-row" class="stats-row"></div>
     <div class="filter-section">
-      <div class="filter-row" id="main-filters"></div>
+      <div class="filter-row" id="cat-filters"></div>
     </div>
     <div id="email-feed" class="email-feed"></div>
     <div class="load-more-wrap" id="load-more-wrap" style="display:none">
       <button class="btn" onclick="showMore()">Show more</button>
     </div>
-    <!-- Subcategory sections -->
-    <div id="subcategories"></div>
   </div>
 
 </div>
@@ -165,7 +163,7 @@ let CSV_URL   = localStorage.getItem('inbox_csv_url') || '';
 let allEmails = [];
 let displayed = 0;
 const PAGE    = 40;
-let activeMain = 'all';
+let activeMain = 'important';
 
 // ── Categories ────────────────────────────────────────────────────────────────
 const CATEGORIES = {
@@ -178,13 +176,8 @@ const CATEGORIES = {
   lowpri:    { label: 'Low Priority',    color: '#f1f0eb', text: '#9b9b97' },
 };
 
-// Categories that show in the main inbox feed
-const MAIN_CATS = new Set(['important']);
-// Categories that show as collapsible subcategories below
+// Subcategory keys for filter pill ordering
 const SUB_CATS = ['lab', 'dept', 'orgs', 'campus', 'promo', 'lowpri'];
-// Track open/closed state per subcategory
-const subOpen = {};
-const subDisplayed = {};
 
 // Sender-based classification rules (checked in order, first match wins)
 const RULES = [
@@ -364,12 +357,9 @@ function parseEmail(r) {
   };
 }
 
-// ── State ────────────────────────────────────────────────────────────────────
-let mainEmails = [];
-
 // ── Load ─────────────────────────────────────────────────────────────────────
 async function loadEmails() {
-  allEmails = []; mainEmails = [];
+  allEmails = [];
   document.getElementById('main-content').style.display = 'block';
   showLoading();
   try {
@@ -383,13 +373,10 @@ async function loadEmails() {
       .map(parseEmail)
       .filter(e => e.cat !== '_skip')
       .sort((a, b) => b.ts - a.ts);
-    mainEmails = allEmails.filter(e => MAIN_CATS.has(e.cat));
-    displayed = Math.min(PAGE, mainEmails.length);
+    displayed = Math.min(PAGE, getFiltered().length);
     document.getElementById('refresh-btn').style.display = 'block';
-    renderStats();
-    renderMainFilters();
+    renderFilters();
     renderEmails();
-    renderSubcategories();
   } catch (e) {
     showError(e.message);
   } finally {
@@ -397,42 +384,57 @@ async function loadEmails() {
   }
 }
 
-// ── Main inbox ──────────────────────────────────────────────────────────────
-function getMainFiltered() {
-  if (activeMain === 'all') return mainEmails;
-  if (activeMain === 'unread') return mainEmails.filter(e => e.isUnread);
-  return mainEmails;
+// ── Filtering ───────────────────────────────────────────────────────────────
+function getFiltered() {
+  if (activeMain === 'important') return allEmails.filter(e => e.cat === 'important');
+  if (activeMain === 'unread') return allEmails.filter(e => e.isUnread);
+  if (activeMain === 'all') return allEmails;
+  return allEmails.filter(e => e.cat === activeMain);
 }
 
-function renderStats() {
-  const mainUnread = mainEmails.filter(e => e.isUnread).length;
-  const totalOther = allEmails.length - mainEmails.length;
-  document.getElementById('stats-row').innerHTML =
-    `<span class="stat"><strong>${mainEmails.length}</strong> important</span>` +
-    `<span class="stat"><strong>${mainUnread}</strong> unread</span>` +
-    `<span class="stat" style="opacity:0.5"><strong>${totalOther}</strong> in subcategories</span>`;
-}
+function renderFilters() {
+  const unreadCounts = {};
+  const catCounts = {};
+  allEmails.forEach(e => {
+    catCounts[e.cat] = (catCounts[e.cat] || 0) + 1;
+    if (e.isUnread) unreadCounts[e.cat] = (unreadCounts[e.cat] || 0) + 1;
+  });
+  const importantUnread = unreadCounts['important'] || 0;
+  const totalUnread = allEmails.filter(e => e.isUnread).length;
 
-function renderMainFilters() {
-  const unread = mainEmails.filter(e => e.isUnread).length;
+  // Important and Unread first, then subcategories
   const pills = [
-    { key: 'all', label: 'All', count: mainEmails.length },
-    { key: 'unread', label: 'Unread', count: unread },
+    { key: 'important', label: 'Important', count: importantUnread },
+    { key: 'unread', label: 'Unread', count: totalUnread },
   ];
-  document.getElementById('main-filters').innerHTML = pills.map(p =>
-    `<button class="filter-btn${activeMain===p.key?' active':''}" onclick="setMain('${p.key}')">${p.label}${p.count ? ' <span class="filter-count">' + p.count + '</span>' : ''}</button>`
+  for (const key of SUB_CATS) {
+    if (catCounts[key]) {
+      pills.push({ key, label: CATEGORIES[key].label, count: unreadCounts[key] || 0 });
+    }
+  }
+  pills.push({ key: 'all', label: 'All', count: totalUnread });
+
+  document.getElementById('cat-filters').innerHTML = pills.map(p =>
+    `<button class="filter-btn${activeMain===p.key?' active':''}" onclick="setCat('${p.key}')">${p.label}${p.count ? ' <span class="filter-count">' + p.count + '</span>' : ''}</button>`
   ).join('');
 }
 
-function setMain(c) { activeMain = c; renderMainFilters(); renderEmails(); }
-function showMore() { displayed = Math.min(displayed + PAGE, getMainFiltered().length); renderEmails(); }
+function setCat(c) { activeMain = c; displayed = Math.min(PAGE, getFiltered().length); renderFilters(); renderEmails(); }
+function showMore() { displayed = Math.min(displayed + PAGE, getFiltered().length); renderEmails(); }
 
 function renderEmails() {
   const feed  = document.getElementById('email-feed');
-  const items = getMainFiltered().slice(0, displayed);
+  const items = getFiltered().slice(0, displayed);
+
+  const importantCount = allEmails.filter(e => e.cat === 'important').length;
+  const importantUnread = allEmails.filter(e => e.cat === 'important' && e.isUnread).length;
+  document.getElementById('stats-row').innerHTML =
+    `<span class="stat"><strong>${importantCount}</strong> important</span>` +
+    `<span class="stat"><strong>${importantUnread}</strong> unread</span>` +
+    `<span class="stat" style="opacity:0.5"><strong>${allEmails.length}</strong> total</span>`;
 
   if (!items.length) {
-    feed.innerHTML = '<p class="state-msg">No important emails right now.</p>';
+    feed.innerHTML = `<p class="state-msg">${activeMain === 'important' ? 'No important emails right now.' : 'No emails match this filter.'}</p>`;
     document.getElementById('load-more-wrap').style.display = 'none';
     return;
   }
@@ -444,45 +446,7 @@ function renderEmails() {
     html += cardHTML(e);
   });
   feed.innerHTML = html;
-  document.getElementById('load-more-wrap').style.display = displayed < getMainFiltered().length ? 'block' : 'none';
-}
-
-// ── Subcategories ───────────────────────────────────────────────────────────
-function renderSubcategories() {
-  const container = document.getElementById('subcategories');
-  let html = '';
-  for (const catKey of SUB_CATS) {
-    const emails = allEmails.filter(e => e.cat === catKey);
-    if (!emails.length) continue;
-    const meta = CATEGORIES[catKey];
-    const unread = emails.filter(e => e.isUnread).length;
-    const isOpen = subOpen[catKey] || false;
-    subDisplayed[catKey] = subDisplayed[catKey] || Math.min(PAGE, emails.length);
-
-    html += `<div class="section-divider">
-      <span><span class="cat-pill" style="background:${meta.color};color:${meta.text}">${meta.label}</span> · ${emails.length}${unread ? ' <span style="color:var(--text)">' + unread + ' unread</span>' : ''}</span>
-      <button class="toggle-btn" onclick="toggleSub('${catKey}')">${isOpen ? 'Hide' : 'Show'}</button>
-    </div>`;
-    if (isOpen) {
-      html += '<div class="email-feed" style="margin-bottom:8px">';
-      emails.slice(0, subDisplayed[catKey]).forEach(e => { html += cardHTML(e); });
-      html += '</div>';
-      if (subDisplayed[catKey] < emails.length) {
-        html += `<div class="load-more-wrap"><button class="btn" onclick="showMoreSub('${catKey}')">Show more</button></div>`;
-      }
-    }
-  }
-  container.innerHTML = html;
-}
-
-function toggleSub(key) {
-  subOpen[key] = !subOpen[key];
-  renderSubcategories();
-}
-function showMoreSub(key) {
-  const emails = allEmails.filter(e => e.cat === key);
-  subDisplayed[key] = Math.min((subDisplayed[key] || PAGE) + PAGE, emails.length);
-  renderSubcategories();
+  document.getElementById('load-more-wrap').style.display = displayed < getFiltered().length ? 'block' : 'none';
 }
 
 function cardHTML(e) {
