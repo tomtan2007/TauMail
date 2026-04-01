@@ -81,11 +81,15 @@
     .email-title { font-size: 13px; font-weight: 500; line-height: 1.35; margin-bottom: 3px; }
     .email-preview { font-size: 12px; color: var(--text-secondary); line-height: 1.45; }
 
-    /* Event badge */
-    .event-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-    .event-badge { font-size: 11px; color: var(--text-secondary); background: var(--bg-secondary); padding: 3px 8px; border-radius: var(--radius-md); display: inline-flex; align-items: center; gap: 4px; }
-    .cal-link { font-size: 11px; color: #1e40af; text-decoration: none; font-weight: 500; }
-    .cal-link:hover { text-decoration: underline; }
+    /* Inline calendar hint */
+    .cal-hint { font-size: 11px; color: var(--text-tertiary); display: inline; }
+    .cal-hint a { color: var(--text-tertiary); text-decoration: none; }
+    .cal-hint a:hover { color: var(--text-secondary); text-decoration: underline; }
+
+    /* Low-pri section */
+    .section-divider { font-size: 13px; font-weight: 500; color: var(--text-tertiary); padding: 24px 0 10px; border-top: 0.5px solid var(--border); margin-top: 20px; display: flex; align-items: center; justify-content: space-between; }
+    .section-divider .toggle-btn { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; font-family: var(--font); }
+    .section-divider .toggle-btn:hover { color: var(--text-secondary); }
 
     .date-divider { font-size: 11px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.06em; text-transform: uppercase; padding: 14px 0 6px; }
     .state-msg { text-align: center; padding: 3rem 1rem; color: var(--text-secondary); font-size: 13px; line-height: 1.8; }
@@ -189,6 +193,17 @@
     <div class="load-more-wrap" id="load-more-wrap" style="display:none">
       <button class="btn" onclick="showMore()">Show more</button>
     </div>
+    <!-- Low priority section -->
+    <div id="lowpri-section" style="display:none">
+      <div class="section-divider">
+        <span id="lowpri-label">Low Priority</span>
+        <button class="toggle-btn" id="lowpri-toggle" onclick="toggleLowPri()">Show</button>
+      </div>
+      <div id="lowpri-feed" class="email-feed" style="display:none"></div>
+      <div class="load-more-wrap" id="lowpri-load-more" style="display:none">
+        <button class="btn" onclick="showMoreLowPri()">Show more</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -201,7 +216,6 @@ let activeCat = 'all';
 
 // ── Categories ────────────────────────────────────────────────────────────────
 const CATEGORIES = {
-  courses:   { label: 'Courses',        color: '#d1fae5', text: '#065f46' },
   lab:       { label: 'Lab & Research',  color: '#dbeafe', text: '#1e40af' },
   dept:      { label: 'BME & Career',    color: '#ede9fe', text: '#5b21b6' },
   orgs:      { label: 'Student Orgs',    color: '#fef3c7', text: '#92400e' },
@@ -222,11 +236,11 @@ const RULES = [
   { cat: 'lowpri', subj: /take .*(survey|poll)/i },
   { cat: 'lowpri', subj: /vote now|minutes to vote/i },
 
-  // Courses
-  { cat: 'courses', from: /instructure\.com/i },
-  { cat: 'courses', from: /perusall\.com/i },
-  { cat: 'courses', from: /gradescope\.com/i },
-  { cat: 'courses', from: /umichpsych.*sona/i },
+  // Skip course emails (handled by Canvas Emails page)
+  { cat: '_skip', from: /instructure\.com/i },
+  { cat: '_skip', from: /perusall\.com/i },
+  { cat: '_skip', from: /gradescope\.com/i },
+  { cat: '_skip', from: /umichpsych.*sona/i },
 
   // Lab & Research
   { cat: 'lab', from: /hankins@med\.umich/i },
@@ -370,9 +384,15 @@ function parseEmail(r) {
   };
 }
 
+// ── State ────────────────────────────────────────────────────────────────────
+let primaryEmails = [];
+let lowPriEmails  = [];
+let lowPriOpen    = false;
+let lowPriDisplayed = 0;
+
 // ── Load ─────────────────────────────────────────────────────────────────────
 async function loadEmails() {
-  allEmails = [];
+  allEmails = []; primaryEmails = []; lowPriEmails = [];
   document.getElementById('main-content').style.display = 'block';
   showLoading();
   try {
@@ -384,11 +404,16 @@ async function loadEmails() {
     allEmails = rows.slice(1)
       .filter(r => r.length >= 6 && !isNaN(parseInt(r[3])))
       .map(parseEmail)
+      .filter(e => e.cat !== '_skip')
       .sort((a, b) => b.ts - a.ts);
-    displayed = Math.min(PAGE, allEmails.length);
+    primaryEmails = allEmails.filter(e => e.cat !== 'lowpri');
+    lowPriEmails  = allEmails.filter(e => e.cat === 'lowpri');
+    displayed = Math.min(PAGE, primaryEmails.length);
+    lowPriDisplayed = Math.min(PAGE, lowPriEmails.length);
     document.getElementById('refresh-btn').style.display = 'block';
     renderFilters();
     renderEmails();
+    renderLowPri();
   } catch (e) {
     showError(e.message);
   } finally {
@@ -398,21 +423,22 @@ async function loadEmails() {
 
 // ── Render ───────────────────────────────────────────────────────────────────
 function getFiltered() {
-  if (activeCat === 'all') return allEmails;
-  if (activeCat === 'unread') return allEmails.filter(e => e.isUnread);
-  return allEmails.filter(e => e.cat === activeCat);
+  if (activeCat === 'all') return primaryEmails;
+  if (activeCat === 'unread') return primaryEmails.filter(e => e.isUnread);
+  return primaryEmails.filter(e => e.cat === activeCat);
 }
 
 function renderFilters() {
   const counts = {};
-  allEmails.forEach(e => { counts[e.cat] = (counts[e.cat] || 0) + 1; });
-  const unread = allEmails.filter(e => e.isUnread).length;
+  primaryEmails.forEach(e => { counts[e.cat] = (counts[e.cat] || 0) + 1; });
+  const unread = primaryEmails.filter(e => e.isUnread).length;
 
   const pills = [
-    { key: 'all', label: 'All', count: allEmails.length },
+    { key: 'all', label: 'All', count: primaryEmails.length },
     { key: 'unread', label: 'Unread', count: unread },
   ];
   for (const [key, meta] of Object.entries(CATEGORIES)) {
+    if (key === 'lowpri') continue;
     if (counts[key]) pills.push({ key, label: meta.label, count: counts[key] });
   }
 
@@ -423,15 +449,17 @@ function renderFilters() {
 
 function setCat(c) { activeCat = c; renderFilters(); renderEmails(); }
 function showMore() { displayed = Math.min(displayed + PAGE, getFiltered().length); renderEmails(); }
+function showMoreLowPri() { lowPriDisplayed = Math.min(lowPriDisplayed + PAGE, lowPriEmails.length); renderLowPri(); }
 
 function renderEmails() {
   const feed  = document.getElementById('email-feed');
   const items = getFiltered().slice(0, displayed);
 
-  const unread = allEmails.filter(e => e.isUnread).length;
+  const unread = primaryEmails.filter(e => e.isUnread).length;
   document.getElementById('stats-row').innerHTML =
-    `<span class="stat"><strong>${allEmails.length}</strong> emails (14 days)</span>` +
-    `<span class="stat"><strong>${unread}</strong> unread</span>`;
+    `<span class="stat"><strong>${primaryEmails.length}</strong> emails</span>` +
+    `<span class="stat"><strong>${unread}</strong> unread</span>` +
+    `<span class="stat" style="opacity:0.5"><strong>${lowPriEmails.length}</strong> low priority</span>`;
 
   if (!items.length) {
     feed.innerHTML = '<p class="state-msg">No emails match this filter.</p>';
@@ -449,17 +477,37 @@ function renderEmails() {
   document.getElementById('load-more-wrap').style.display = displayed < getFiltered().length ? 'block' : 'none';
 }
 
+function toggleLowPri() {
+  lowPriOpen = !lowPriOpen;
+  document.getElementById('lowpri-feed').style.display = lowPriOpen ? 'flex' : 'none';
+  document.getElementById('lowpri-toggle').textContent = lowPriOpen ? 'Hide' : 'Show';
+  if (lowPriOpen) renderLowPri();
+}
+
+function renderLowPri() {
+  const section = document.getElementById('lowpri-section');
+  if (!lowPriEmails.length) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  const unread = lowPriEmails.filter(e => e.isUnread).length;
+  document.getElementById('lowpri-label').textContent = `Low Priority · ${lowPriEmails.length}${unread ? ` (${unread} unread)` : ''}`;
+  if (!lowPriOpen) return;
+
+  const items = lowPriEmails.slice(0, lowPriDisplayed);
+  let html = '';
+  items.forEach(e => { html += cardHTML(e); });
+  document.getElementById('lowpri-feed').innerHTML = html;
+  document.getElementById('lowpri-load-more').style.display = lowPriDisplayed < lowPriEmails.length ? 'block' : 'none';
+}
+
 function cardHTML(e) {
   const cat  = CATEGORIES[e.cat];
   const pill = `<span class="cat-pill" style="background:${cat.color};color:${cat.text}">${cat.label}</span>`;
 
-  let eventHTML = '';
+  // Inline calendar hint next to date
+  let calHint = '';
   if (e.event) {
     const link = calendarLink(e.subject, e.event);
-    eventHTML = `<div class="event-row">
-      <span class="event-badge">&#128197; ${e.event.date}${e.event.time ? ' · ' + e.event.time : ''}</span>
-      <a class="cal-link" href="${link}" target="_blank" rel="noopener" onclick="event.stopPropagation()">+ Add to calendar</a>
-    </div>`;
+    calHint = `<span class="cal-hint"> · <a href="${link}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Add to Google Calendar">${e.event.date}${e.event.time ? ' ' + e.event.time : ''} ↗</a></span>`;
   }
 
   const preview = (!e.isUnread || e.cat === 'lowpri') ? '' :
@@ -470,12 +518,12 @@ function cardHTML(e) {
       ${pill}
       <span class="sender">${e.sender}</span>
       <div class="email-meta">
-        <span class="email-date">${formatDate(e.ts)}</span>
+        <span class="email-date">${formatDate(e.ts)}${calHint}</span>
         ${e.isUnread ? '<span class="unread-dot"></span>' : ''}
       </div>
     </div>
     <div class="email-title">${e.title}</div>
-    ${preview}${eventHTML}
+    ${preview}
   </a>`;
 }
 
