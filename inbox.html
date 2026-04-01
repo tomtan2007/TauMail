@@ -542,17 +542,17 @@ function getFiltered() {
 }
 
 function renderFilters() {
-  const counts = {};
-  primaryEmails.forEach(e => { counts[e.cat] = (counts[e.cat] || 0) + 1; });
-  const unread = primaryEmails.filter(e => e.isUnread).length;
+  const unreadCounts = {};
+  primaryEmails.forEach(e => { if (e.isUnread) unreadCounts[e.cat] = (unreadCounts[e.cat] || 0) + 1; });
+  const totalUnread = primaryEmails.filter(e => e.isUnread).length;
 
   const pills = [
-    { key: 'all', label: 'All', count: primaryEmails.length },
-    { key: 'unread', label: 'Unread', count: unread },
+    { key: 'all', label: 'All', count: totalUnread },
+    { key: 'unread', label: 'Unread', count: totalUnread },
   ];
   for (const [key, meta] of Object.entries(CATEGORIES)) {
     if (key === 'lowpri') continue;
-    if (counts[key]) pills.push({ key, label: meta.label, count: counts[key] });
+    if (unreadCounts[key]) pills.push({ key, label: meta.label, count: unreadCounts[key] });
   }
 
   document.getElementById('cat-filters').innerHTML = pills.map(p =>
