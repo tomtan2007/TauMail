@@ -119,17 +119,25 @@
   <div id="setup-screen" style="display:none">
     <div class="setup-card">
       <div class="setup-title">One-time setup</div>
-      <div class="setup-sub">Same pattern as the Canvas emails page — an Apps Script syncs your inbox into a Google Sheet, which is published as a public CSV this page reads.</div>
+      <div class="setup-sub">An Apps Script syncs your inbox into a Google Sheet with AI classification via Gemini. The sheet is published as CSV for this page to read.</div>
 
       <div class="setup-step">
         <div class="step-num">1</div>
-        <div>Create a new Google Sheet. Copy the <strong>spreadsheet ID</strong> from the URL (between <code>/d/</code> and <code>/edit</code>).</div>
+        <div>Get a free Gemini API key from <a class="setup-link" href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.</div>
       </div>
 
       <div class="setup-step">
         <div class="step-num">2</div>
-        <div>Open <a class="setup-link" href="https://script.google.com" target="_blank">script.google.com</a> → New project → paste this code. Replace <code>YOUR_SHEET_ID</code>.
-          <div class="code-block" id="script-code">function syncInbox() {
+        <div>Create a new Google Sheet (or reuse your Canvas sheet). Copy the <strong>spreadsheet ID</strong> from the URL.</div>
+      </div>
+
+      <div class="setup-step">
+        <div class="step-num">3</div>
+        <div>Open <a class="setup-link" href="https://script.google.com" target="_blank">script.google.com</a> → New project → paste this code. Replace <code>YOUR_SHEET_ID</code> and <code>YOUR_GEMINI_KEY</code>.
+          <div class="code-block" id="script-code">var SHEET_ID = 'YOUR_SHEET_ID';
+var GEMINI_KEY = 'YOUR_GEMINI_KEY';
+
+function syncInbox() {
   var threads = GmailApp.search('in:inbox newer_than:14d', 0, 200);
   var emails = [];
   for (var i = 0; i &lt; threads.length; i++) {
@@ -148,28 +156,97 @@
     ]);
   }
   emails.sort(function(a, b) { return b[3] - a[3]; });
-  var ss = SpreadsheetApp.openById('YOUR_SHEET_ID');
+
+  // Classify with Gemini in batches of 20
+  var categories = classifyEmails(emails);
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName('inbox');
   if (!sheet) sheet = ss.insertSheet('inbox');
   sheet.clearContents();
-  sheet.getRange(1, 1, 1, 6).setValues(
-    [['id','subject','from','date','body','unread']]
+  sheet.getRange(1,1,1,7).setValues(
+    [['id','subject','from','date','body','unread','category']]
   );
   if (emails.length > 0) {
-    sheet.getRange(2,1,emails.length,6).setValues(emails);
+    var rows = emails.map(function(e, i) {
+      return e.concat([categories[i] || 'campus']);
+    });
+    sheet.getRange(2,1,rows.length,7).setValues(rows);
   }
+}
+
+function classifyEmails(emails) {
+  var cats = [];
+  var BATCH = 20;
+  for (var i = 0; i &lt; emails.length; i += BATCH) {
+    var batch = emails.slice(i, i + BATCH);
+    var lines = batch.map(function(e, j) {
+      return (j+1) + '. FROM: ' + e[2]
+        + ' | SUBJ: ' + e[1];
+    }).join('\n');
+    var prompt = 'You are an email classifier for a UMich '
+      + 'BME undergrad. Classify each email into exactly '
+      + 'one category. Reply with ONLY the numbers and '
+      + 'categories, one per line like "1. lab"\n\n'
+      + 'Categories:\n'
+      + '- lab: from lab PI/members, research related\n'
+      + '- dept: BME department, career services, '
+      + 'seminars, thesis defenses, job/internship\n'
+      + '- orgs: student organizations, clubs\n'
+      + '- campus: important campus announcements, '
+      + 'safety alerts, registrar, financial aid, '
+      + 'housing, IT — things that may need action\n'
+      + '- lowpri: mass emails, surveys, voting, '
+      + 'newsletters, promotions, events the student '
+      + 'likely wont attend, generic department blasts, '
+      + 'MCTP events, storage reminders, Lyft, study '
+      + 'recruitment\n\nWhen in doubt, mark as lowpri. '
+      + 'Emails:\n' + lines;
+    try {
+      var resp = UrlFetchApp.fetch(
+        'https://generativelanguage.googleapis.com'
+        + '/v1beta/models/gemini-2.0-flash:generateContent'
+        + '?key=' + GEMINI_KEY,
+        { method: 'post',
+          contentType: 'application/json',
+          payload: JSON.stringify({
+            contents: [{parts: [{text: prompt}]}]
+          }),
+          muteHttpExceptions: true
+        });
+      var json = JSON.parse(resp.getContentText());
+      var text = json.candidates[0].content
+        .parts[0].text;
+      var map = {};
+      text.split('\n').forEach(function(line) {
+        var m = line.match(/^(\d+)\.\s*(\w+)/);
+        if (m) map[parseInt(m[1])] = m[2].toLowerCase();
+      });
+      for (var j = 0; j &lt; batch.length; j++) {
+        var c = map[j+1] || 'campus';
+        var valid = ['lab','dept','orgs',
+          'campus','lowpri'];
+        cats.push(valid.indexOf(c) >= 0 ? c : 'campus');
+      }
+    } catch(err) {
+      for (var j = 0; j &lt; batch.length; j++) {
+        cats.push('campus');
+      }
+    }
+  }
+  return cats;
 }</div>
           <div class="copy-row"><button class="copy-btn" id="copy-btn" onclick="copyScript()">copy code</button></div>
         </div>
       </div>
 
       <div class="setup-step">
-        <div class="step-num">3</div>
+        <div class="step-num">4</div>
         <div>Click ▶ <strong>Run</strong>, authorize when prompted. Then set up a <strong>time trigger</strong> (clock icon → Add Trigger → <code>syncInbox</code> → every 15 min).</div>
       </div>
 
       <div class="setup-step">
-        <div class="step-num">4</div>
+        <div class="step-num">5</div>
         <div>In the Sheet: <strong>File → Share → Publish to web</strong> → select the <strong>inbox</strong> sheet → <strong>CSV</strong> → Publish. Copy the URL.</div>
       </div>
 
@@ -179,7 +256,7 @@
         <input class="setup-input" id="url-input" type="text" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv" />
         <button class="btn btn-primary" onclick="saveUrl()">Save</button>
       </div>
-      <div class="setup-note">If you already set up the Canvas emails sheet, you can reuse the same spreadsheet — the script creates its own "inbox" tab.</div>
+      <div class="setup-note">If you already set up the Canvas emails sheet, you can reuse the same spreadsheet — the script creates its own "inbox" tab. The Gemini API free tier handles this volume easily.</div>
     </div>
   </div>
 
@@ -301,7 +378,7 @@ function senderName(from) {
 }
 
 // ── Event detection ──────────────────────────────────────────────────────────
-// Only match written-out month names (not numeric m/d patterns which cause false positives)
+// Only detect events when subject has both a date AND a time (e.g. "April 18th 11:00AM")
 const MONTHS = 'January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
 const DATE_RE = new RegExp(
   '(?:' + MONTHS + ')\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?(?:[,\\s]+\\d{4})?',
@@ -309,17 +386,12 @@ const DATE_RE = new RegExp(
 );
 const TIME_RE = /\d{1,2}(?::\d{2})?\s*(?:am|pm)(?:\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))?/gi;
 
-// Keywords that suggest the email is about an event
-const EVENT_KEYWORDS = /\b(rsvp|register|attend|workshop|seminar|meeting|event|session|deadline|due|reminder|defense|presentation|talk|lecture|info\s*session)\b/i;
-
-function detectEvent(subject, body) {
-  // Only look in the subject — body dates are usually signatures, timestamps, etc.
-  const text = subject;
-  if (!EVENT_KEYWORDS.test(subject + ' ' + body.substring(0, 300))) return null;
-  const dates = text.match(DATE_RE);
-  const times = text.match(TIME_RE);
-  if (!dates || dates.length === 0) return null;
-  return { date: dates[0].trim(), time: times ? times[0].trim() : null };
+function detectEvent(subject) {
+  // Require BOTH a date and time in the subject line — no body scanning
+  const dates = subject.match(DATE_RE);
+  const times = subject.match(TIME_RE);
+  if (!dates || !times) return null;
+  return { date: dates[0].trim(), time: times[0].trim() };
 }
 
 function calendarLink(subject, event) {
@@ -369,8 +441,11 @@ function parseEmail(r) {
   const from    = r[2] || '';
   const subject = r[1] || '';
   const body    = r[4] || '';
-  const cat     = classify(from, subject);
-  const event   = (cat !== 'lowpri') ? detectEvent(subject, body) : null;
+  // Use AI category from column 7 if available, otherwise fall back to regex
+  const aiCat   = (r[6] || '').trim().toLowerCase();
+  const validCats = ['lab','dept','orgs','campus','lowpri','_skip'];
+  const cat     = validCats.includes(aiCat) ? aiCat : classify(from, subject);
+  const event   = (cat !== 'lowpri') ? detectEvent(subject) : null;
 
   const preview = body
     .replace(/https?:\/\/\S+/g, '')
