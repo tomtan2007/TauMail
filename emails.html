@@ -108,6 +108,22 @@
     .load-more-wrap { text-align: center; padding: 16px 0 4px; }
     .text-btn { font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; font-family: var(--font); padding: 0; }
     .text-btn:hover { color: var(--text-secondary); }
+
+    /* Email modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px); }
+    .modal { background: var(--bg); border-radius: var(--radius-lg); max-width: 680px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,0.18); }
+    .modal-header { padding: 1.25rem 1.5rem 1rem; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+    .modal-subject { font-size: 17px; font-weight: 500; line-height: 1.35; margin-bottom: 8px; }
+    .modal-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .modal-sender { font-size: 13px; font-weight: 500; color: var(--text); }
+    .modal-date { font-size: 12px; color: var(--text-tertiary); }
+    .modal-body { padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-wrap: break-word; }
+    .modal-footer { padding: 0.75rem 1.5rem; border-top: 0.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .modal-footer .truncated-note { font-size: 11px; color: var(--text-tertiary); }
+    @media (max-width: 600px) {
+      .modal { max-height: 90vh; border-radius: var(--radius-md); }
+      .modal-header, .modal-body, .modal-footer { padding-left: 1rem; padding-right: 1rem; }
+    }
   </style>
 </head>
 <body>
@@ -213,6 +229,27 @@
     <div id="email-feed" class="email-feed"></div>
     <div class="load-more-wrap" id="load-more-wrap" style="display:none">
       <button class="btn" onclick="showMore()">Show more</button>
+    </div>
+  </div>
+
+  <!-- Email Modal (announcements only) -->
+  <div id="email-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-subject" id="modal-subject"></div>
+        <div class="modal-meta">
+          <span class="modal-sender" id="modal-sender"></span>
+          <span class="modal-date" id="modal-date"></span>
+        </div>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer">
+        <span class="truncated-note" id="modal-note"></span>
+        <div>
+          <button class="btn btn-sm" onclick="closeModal()">Close</button>
+          <button class="btn btn-sm btn-primary" id="modal-gmail-btn" onclick="">Open in Gmail</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -327,9 +364,13 @@ function parseEmail(raw) {
   const preview = raw.body
     .replace(/https?:\/\/\S+/g, '')
     .replace(/\[([^\]]+)\]\s*\([^)]*\)/g, '$1')
-    .replace(/\r?\n{3,}/g, '\n\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{2,}/g, '⏎⏎')
+    .replace(/\n/g, ' ')
+    .replace(/⏎⏎/g, '\n\n')
+    .replace(/ {2,}/g, ' ')
     .trim().substring(0, 220);
-  return {id: raw.id, course, source, type, isGrade, title: title||raw.subject, preview, grade,
+  return {id: raw.id, course, source, type, isGrade, title: title||raw.subject, preview, body: raw.body, grade,
     isUnread: raw.unread, ts: raw.date,
     gmailUrl: 'https://mail.google.com/mail/u/0/#all/' + raw.id};
 }
@@ -433,7 +474,18 @@ function cardHTML(e) {
   } else if (e.preview) {
     body=`<div class="email-preview">${e.preview}</div>`;
   }
-  return `<a class="email-card${e.isUnread?' unread':''}" href="${e.gmailUrl}" target="_blank" rel="noopener">
+  if (e.isGrade) {
+    return `<a class="email-card${e.isUnread?' unread':''}" href="${e.gmailUrl}" target="_blank" rel="noopener">
+      <div class="email-card-top">${pill}${badge}${srcTag}
+        <div class="email-card-meta">
+          <span class="email-date">${formatDate(e.ts)}</span>
+          ${e.isUnread?'<span class="unread-dot"></span>':''}
+        </div>
+      </div>
+      <div class="email-title">${e.title}</div>${body}
+    </a>`;
+  }
+  return `<div class="email-card${e.isUnread?' unread':''}" style="cursor:pointer" onclick="openEmail('${e.id}')">
     <div class="email-card-top">${pill}${badge}${srcTag}
       <div class="email-card-meta">
         <span class="email-date">${formatDate(e.ts)}</span>
@@ -441,7 +493,7 @@ function cardHTML(e) {
       </div>
     </div>
     <div class="email-title">${e.title}</div>${body}
-  </a>`;
+  </div>`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -490,6 +542,30 @@ function copyScript() {
     b.textContent='copied!'; setTimeout(()=>b.textContent='copy code',2000);
   });
 }
+
+// ── Email modal (announcements only) ─────────────────────────────────────────
+function openEmail(id) {
+  const e = allEmails.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('modal-subject').textContent = e.title;
+  document.getElementById('modal-sender').textContent = e.course + ' · ' + e.source;
+  document.getElementById('modal-date').textContent = new Date(e.ts).toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+  let body = e.body || e.preview || '';
+  body = body.replace(/https?:\/\/\S+/g, '[link]');
+  body = body.replace(/\r\n/g, '\n');
+  body = body.replace(/\n{2,}/g, '⏎⏎');
+  body = body.replace(/\n/g, ' ');
+  body = body.replace(/⏎⏎/g, '\n\n');
+  body = body.replace(/ {2,}/g, ' ').trim();
+  document.getElementById('modal-body').textContent = body;
+  document.getElementById('modal-note').textContent = body.length >= 580 ? 'Email may be truncated' : '';
+  document.getElementById('modal-gmail-btn').onclick = () => window.open(e.gmailUrl, '_blank');
+  document.getElementById('email-modal').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('email-modal').style.display = 'none';
+}
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeModal(); });
 
 // Boot
 if (CSV_URL) loadEmails();
