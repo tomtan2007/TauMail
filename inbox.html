@@ -382,7 +382,8 @@ function parseEmail(r) {
   const preview = aiSummary || body
     .replace(/https?:\/\/\S+/g, '')
     .replace(/\[([^\]]+)\]\s*\([^)]*\)/g, '$1')
-    .replace(/\r?\n{3,}/g, '\n\n')
+    .replace(/\r?\n/g, ' ')
+    .replace(/ {2,}/g, ' ')
     .trim().substring(0, 200);
 
   return {
@@ -577,7 +578,13 @@ function openEmail(id) {
 
   // Clean up body text for display
   let body = e.body || e.preview || '';
-  body = body.replace(/https?:\/\/\S+/g, '[link]').replace(/\r?\n{4,}/g, '\n\n\n').trim();
+  body = body.replace(/https?:\/\/\S+/g, '[link]');
+  // Collapse single newlines into spaces (email line wrapping), keep paragraph breaks
+  body = body.replace(/\r\n/g, '\n');
+  body = body.replace(/\n{2,}/g, '⏎⏎');       // preserve paragraph breaks
+  body = body.replace(/\n/g, ' ');              // collapse single newlines
+  body = body.replace(/⏎⏎/g, '\n\n');          // restore paragraph breaks
+  body = body.replace(/ {2,}/g, ' ').trim();
   document.getElementById('modal-body').textContent = body;
 
   const isTruncated = e.body && e.body.length >= 790;
